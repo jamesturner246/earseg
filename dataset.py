@@ -17,7 +17,6 @@ def load_png(image_path, label_path):
         message="image and label mask shape mismatch")
 
     # Prepare image
-    image = image[:, :, 0:3]
     image = tf.cast(image, tf.float32)
 
     # Prepare label mask
@@ -54,6 +53,18 @@ def load_tiff(image_path, label_path):
     return image, label
 
 
+def resize(shape):
+    # Resize image
+    # input (height, width, channels)
+
+    def fn(image, label):
+        image = tf.image.resize(image, shape, method='bilinear')
+        label = tf.image.resize(label, shape, method='nearest')
+        return image, label
+
+    return fn
+
+
 def standardise(mean, std):
     # samplewise standardise (scalars) or colourwise standardise (3-vectors)
     # input (height, width, channels) or (batch, height, width, channels)
@@ -87,7 +98,7 @@ def random_flip():
 def random_crop(
         shape, crop_area=0.5, crop_area_jitter=0.05,
         crop_aspect_ratio_jitter=0.2):
-    # Random crop with final resize
+    # Random crop image
     # input (height, width, channels)
 
     crop_area_min = crop_area - crop_area_jitter
@@ -105,11 +116,9 @@ def random_crop(
             area_range=[crop_area_min, crop_area_max],
             max_attempts=100, use_image_if_no_bounding_boxes=True)
 
-        # Crop image with bbox and resize
+        # Crop image with bbox
         image = tf.slice(image, bbox_begin, bbox_size)
-        image = tf.image.resize(image, shape, method='bilinear')
         label = tf.slice(label, bbox_begin, bbox_size)
-        label = tf.image.resize(label, shape, method='nearest')
         return image, label
 
     return fn
@@ -133,9 +142,8 @@ def sample_weights(class_weights):
 
 
 def load_dataset(
-        image_path, label_path,
-        shape=(256, 256), crop_area=0.5, crop_area_jitter=0.05,
-        crop_aspect_ratio_jitter=0.2,
+        image_path_pattern, label_path_pattern, shape=None,
+        do_crop=False, crop_area=0.5, crop_area_jitter=0.05, crop_aspect_ratio_jitter=0.2,
         do_standardise=False, image_mean=None, image_std=None,
         do_random_flip=False,
         do_shuffle=False, shuffle_seed=None,
@@ -143,43 +151,55 @@ def load_dataset(
         batch_size=1):
 
     # Find dataset files
-    image_files_ds = tf.data.Dataset.list_files(f"{image_path}/*", shuffle=False)
-    label_files_ds = tf.data.Dataset.list_files(f"{label_path}/*", shuffle=False)
+    image_files_ds = tf.data.Dataset.list_files(image_path_pattern, shuffle=False)
+    label_files_ds = tf.data.Dataset.list_files(label_path_pattern, shuffle=False)
     files_ds = tf.data.Dataset.zip((image_files_ds, label_files_ds))
     files_ds = files_ds.cache()
+
+    # Shuffle
     if do_shuffle:
+        print("preprocessing: shuffle")
         files_ds = files_ds.shuffle(1000, seed=shuffle_seed)
 
-    # Load images and label masks
-    #ds = files_ds.map(load_tiff, num_parallel_calls=tf.data.AUTOTUNE)
+    # Load images and labels
+    print("preprocessing: load_image")
     ds = files_ds.map(load_png, num_parallel_calls=tf.data.AUTOTUNE)
+    #ds = files_ds.map(load_tiff, num_parallel_calls=tf.data.AUTOTUNE)
 
     # Random cropping
-    random_crop_fn = random_crop(
-        shape, crop_area=crop_area, crop_area_jitter=crop_area_jitter,
-        crop_aspect_ratio_jitter=crop_aspect_ratio_jitter,
-    )
-    ds = ds.map(random_crop_fn, num_parallel_calls=tf.data.AUTOTUNE)
+    if do_crop:
+        print("preprocessing: random_crop")
+        random_crop_fn = random_crop(
+            shape, crop_area=crop_area, crop_area_jitter=crop_area_jitter,
+            crop_aspect_ratio_jitter=crop_aspect_ratio_jitter)
+        ds = ds.map(random_crop_fn, num_parallel_calls=tf.data.AUTOTUNE)
 
-    # Standardise images
+    # Resize image
+    if shape is not None:
+        print("preprocessing: resize")
+        resize_fn = resize(shape)
+        ds = ds.map(resize_fn, num_parallel_calls=tf.data.AUTOTUNE)
+
+    # Standardise image
     if do_standardise:
+        print("preprocessing: standardise")
         standardise_fn = standardise(image_mean, image_std)
         ds = ds.map(standardise_fn, num_parallel_calls=tf.data.AUTOTUNE)
 
     # Random flipping
     if do_random_flip:
+        print("preprocessing: random_flip")
         random_flip_fn = random_flip()
         ds = ds.map(random_flip_fn, num_parallel_calls=tf.data.AUTOTUNE)
 
     # Add sample weights image
     if do_class_balance:
+        print("preprocessing: sample_weights")
         sample_weights_fn = sample_weights(class_weights)
         ds = ds.map(sample_weights_fn, num_parallel_calls=tf.data.AUTOTUNE)
 
-    # Batching
+    # Batch and prefetch
     ds = ds.batch(batch_size)
-
-    # Prefetching
     ds = ds.prefetch(tf.data.AUTOTUNE)
 
     return ds
