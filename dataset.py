@@ -1,15 +1,17 @@
 import tensorflow as tf
-import tensorflow_io as tfio
+#import tensorflow_io as tfio
 
 
-def load_png(image_path, label_path):
+def load_image(image_path, label_path):
     # Read files into memory
     image = tf.io.read_file(image_path)
     label = tf.io.read_file(label_path)
 
-    # Decode PNG format files
+    # Decode image files
     image = tf.image.decode_png(image)
     label = tf.image.decode_png(label)
+    # image = tfio.experimental.image.decode_tiff(image)
+    # label = tfio.experimental.image.decode_tiff(label)
 
     # Check image and label mask shapes match
     tf.debugging.assert_equal(
@@ -17,32 +19,6 @@ def load_png(image_path, label_path):
         message="image and label mask shape mismatch")
 
     # Prepare image
-    image = tf.cast(image, tf.float32)
-
-    # Prepare label mask
-    # NOTE: assumes pos is (255, 0, 0) and neg is (255, 255, 255)
-    label = label[:, :, 1:2]
-    label = tf.where(label > 0, tf.constant(0, dtype=tf.uint8), tf.constant(1, dtype=tf.uint8))
-
-    return image, label
-
-
-def load_tiff(image_path, label_path):
-    # Read files into memory
-    image = tf.io.read_file(image_path)
-    label = tf.io.read_file(label_path)
-
-    # Decode TIFF format files
-    image = tfio.experimental.image.decode_tiff(image)
-    label = tfio.experimental.image.decode_tiff(label)
-
-    # Check image and label mask shapes match
-    tf.debugging.assert_equal(
-        tf.shape(image), tf.shape(label),
-        message="image and label mask shape mismatch")
-
-    # Prepare image
-    image = image[:, :, 0:3]
     image = tf.cast(image, tf.float32)
 
     # Prepare label mask
@@ -163,8 +139,7 @@ def load_dataset(
 
     # Load images and labels
     print("preprocessing: load_image")
-    ds = files_ds.map(load_png, num_parallel_calls=tf.data.AUTOTUNE)
-    #ds = files_ds.map(load_tiff, num_parallel_calls=tf.data.AUTOTUNE)
+    ds = files_ds.map(load_image, num_parallel_calls=tf.data.AUTOTUNE)
 
     # Random cropping
     if do_crop:
