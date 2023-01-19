@@ -31,10 +31,6 @@ def main(epochs=100, batch_size=1,
 
 
 
-
-
-
-
     # TODO: these were from a *very* small sample - need better estimates
     image_mean = 194.7735
     image_std = 35.388493
@@ -61,11 +57,36 @@ def main(epochs=100, batch_size=1,
     #     do_class_balance=do_class_balance, class_weights=class_weights,
     #     batch_size=batch_size)
 
-    # debug_ds = load_dataset(
-    #     "./data/*_image/*", "./data/*_label/*", shape=(512, 512),
-    #     do_shuffle=False, shuffle_seed=shuffle_seed,
-    #     do_class_balance=True, class_weights=class_weights,
-    #     batch_size=1)
+
+
+    # # TODO: FOR CLASS BALANCING
+
+    # y_size_all = 0
+    # y_sum_all = 0
+    # y_not_sum_all = 0
+
+    # for x, y in train_ds:
+    #     print(y.shape, np.unique(y))
+
+    #     print("y.size  ", y.size)
+    #     y_size_all += y.size
+
+    #     y_not_sum = np.sum(y == 0)
+    #     print("ynotsum ", y_not_sum)
+    #     y_not_sum_all += y_not_sum
+
+    #     y_sum = np.sum(y == 1)
+    #     print("ysum    ", y_sum)
+    #     y_sum_all += y_sum
+
+    #     print()
+
+    # print()
+    # print("size   ", y_size_all)
+    # print("y      ", y_sum_all)
+    # print("y not  ", y_not_sum_all)
+
+    # exit(0)
 
 
 
@@ -74,9 +95,15 @@ def main(epochs=100, batch_size=1,
 
     # # TODO: DEBUG DATASETS
 
+    # debug_ds = load_dataset(
+    #     "./data/*_image/*", "./data/*_label/*", shape=(512, 512),
+    #     do_shuffle=False, shuffle_seed=shuffle_seed,
+    #     do_class_balance=True, class_weights=class_weights,
+    #     batch_size=1)
+
+    # ds = debug_ds
     # #ds = train_ds
     # #ds = validate_ds
-    # ds = debug_ds
 
     # fig, ax = plt.subplots(2, 6)
     # for i, (x, y, w) in enumerate(ds.take(6)):
@@ -102,44 +129,8 @@ def main(epochs=100, batch_size=1,
 
     # plt.show()
     # cv2.destroyAllWindows()
-    # exit(0)
-
-
-
-
-
-
-    # # TODO: FOR CLASS BALANCING
-
-    # y_size_all = 0
-    # y_sum_all = 0
-    # y_not_sum_all = 0
-
-    # for x, y in train_ds:
-    #     print(y.shape, np.unique(y))
-
-    #     y_size = np.prod(y.shape)
-    #     print("y_size  ", y_size)
-    #     y_size_all += y_size
-
-    #     y_not_sum = np.sum(y == 0)
-    #     print("ynotsum ", y_not_sum)
-    #     y_not_sum_all += y_not_sum
-
-    #     y_sum = np.sum(y == 1)
-    #     print("ysum    ", y_sum)
-    #     y_sum_all += y_sum
-
-    #     print()
-
-    # print()
-    # print("size  ", y_size_all)
-    # print("noty  ", y_not_sum_all)
-    # print("y     ", y_sum_all)
 
     # exit(0)
-
-
 
 
 
@@ -169,8 +160,8 @@ def main(epochs=100, batch_size=1,
     # #model.save_weights("NEW_weights.h5")
 
 
-
-
+    # # === Show Predictions ===
+    # # ========================
 
     # for val_next in validate_ds:
     #     val_x = val_next[0]
@@ -179,7 +170,7 @@ def main(epochs=100, batch_size=1,
 
     #     a = val_x[0].numpy() * image_std + image_mean
     #     b = val_y[0].numpy()
-    #     c = np.argmax(pred_y[0].numpy(), axis=-1)
+    #     c = np.argmax(pred_y[0].numpy(), axis=2)
 
     #     fig, ax = plt.subplots(1, 3)
     #     ax[0].imshow(a.astype("uint8"))
@@ -187,43 +178,192 @@ def main(epochs=100, batch_size=1,
     #     ax[2].imshow(c.astype("uint8"))
     #     plt.show()
 
-    
-
-
-
+    # exit(0)
 
 
     # === Test Large Image ===
     # ========================
 
+    image_path = "./data/test_image/8-1_12-17_TEM_can_it_handle_this_0_0_3072_18432.png"
 
     import PIL.Image
 
-    image_path = "./data/test_image/8-1_12-17_TEM_can_it_handle_this_0_0_3072_18432.png"
-
     with PIL.Image.open(image_path) as image_pil:
-
-        #new_scale = 1
-        new_scale = 7/8
-        #new_scale = 3/4
-
-        new_shape = tuple(int(s * new_scale) for s in image_pil.size)
-        image_raw = np.array(image_pil.resize(new_shape))
+        image_raw = np.array(image_pil)
 
     image = (image_raw - image_mean) / image_std
     image = image[np.newaxis, ...]
     image_raw = image_raw / 255
 
+    with tf.device("/CPU:0"):
+        model = define_model(image.shape[1:3], n_class)
+        model.load_weights("NEW_weights.h5")
+        pred = model(image).numpy()[0]
 
-    model = define_model(image.shape[1:3], n_class)
-    model.load_weights("NEW_weights.h5")
-    pred = model(image).numpy()[0]
-    pred = np.argmax(pred, axis=2)
+
+    # TODO: PREDICTION DECISION BOUNDARY
 
 
-    fig, ax = plt.subplots(1, 2, sharex=True, sharey=True)
-    ax[0].imshow(image_raw)
-    ax[1].imshow(pred)
+    # pred_1 = (pred[:, :, 1] > 0.5).astype("uint8")
+    # pred_2 = (pred[:, :, 1] > 0.6).astype("uint8")
+    # pred_3 = (pred[:, :, 1] > 0.7).astype("uint8")
+    # pred_4 = (pred[:, :, 1] > 0.8).astype("uint8")
+    # pred_5 = (pred[:, :, 1] > 0.9).astype("uint8")
+
+    # fig, ax = plt.subplots(1, 6, sharex=True, sharey=True)
+    # ax[0].imshow(image_raw)
+    # ax[1].imshow(pred_1)
+    # ax[2].imshow(pred_2)
+    # ax[3].imshow(pred_3)
+    # ax[4].imshow(pred_4)
+    # ax[5].imshow(pred_5)
+    # plt.show()
+
+
+    # pred_1 = (pred[:, :, 1] > 0.90).astype("uint8")
+    # pred_2 = (pred[:, :, 1] > 0.91).astype("uint8")
+    # pred_3 = (pred[:, :, 1] > 0.92).astype("uint8")
+    # pred_4 = (pred[:, :, 1] > 0.93).astype("uint8")
+    # pred_5 = (pred[:, :, 1] > 0.94).astype("uint8")
+    # pred_6 = (pred[:, :, 1] > 0.95).astype("uint8")
+    # pred_7 = (pred[:, :, 1] > 0.96).astype("uint8")
+
+    # fig, ax = plt.subplots(1, 8, sharex=True, sharey=True)
+    # ax[0].imshow(image_raw)
+    # ax[1].imshow(pred_1)
+    # ax[2].imshow(pred_2)
+    # ax[3].imshow(pred_3)
+    # ax[4].imshow(pred_4)
+    # ax[5].imshow(pred_5)
+    # ax[6].imshow(pred_6)
+    # ax[7].imshow(pred_7)
+    # plt.show()
+
+
+    # TODO: PREDICTION DILATE AND ERODE
+
+    from skimage.draw import disk
+
+    def get_kernel(radius):
+        size = 2 * radius + 1
+        kernel = np.zeros((size, size), 'uint8')
+        r, c = disk((radius, radius), radius)
+        kernel[r, c] = 1
+        return kernel
+
+    pred_argmax = np.argmax(pred, axis=2).astype("uint8")
+    pred_1 = (pred[:, :, 1] > 0.5).astype("uint8")
+    pred_2 = (pred[:, :, 1] > 0.6).astype("uint8")
+    pred_3 = (pred[:, :, 1] > 0.7).astype("uint8")
+    pred_4 = (pred[:, :, 1] > 0.8).astype("uint8")
+    pred_5 = (pred[:, :, 1] > 0.9).astype("uint8")
+
+    pred_1_processed_0 = pred_1
+    #pred_2_processed_0 = pred_2
+    #pred_3_processed_0 = pred_3
+    #pred_4_processed_0 = pred_4
+    #pred_5_processed_0 = pred_5
+
+    kernel_5 = get_kernel(5)
+    kernel_10 = get_kernel(10)
+    kernel_15 = get_kernel(15)
+
+    pred_1_processed_1 = cv2.erode(pred_1_processed_0, kernel_5)
+    pred_1_processed_1 = cv2.dilate(pred_1_processed_1, kernel_5)
+    pred_1_processed_1 = cv2.dilate(pred_1_processed_1, kernel_5)
+    pred_1_processed_1 = cv2.erode(pred_1_processed_1, kernel_5)
+
+    pred_1_processed_2 = cv2.erode(pred_1_processed_0, kernel_10)
+    pred_1_processed_2 = cv2.dilate(pred_1_processed_2, kernel_10)
+    pred_1_processed_2 = cv2.dilate(pred_1_processed_2, kernel_10)
+    pred_1_processed_2 = cv2.erode(pred_1_processed_2, kernel_10)
+
+    pred_1_processed_3 = cv2.erode(pred_1_processed_0, kernel_15)
+    pred_1_processed_3 = cv2.dilate(pred_1_processed_3, kernel_15)
+    pred_1_processed_3 = cv2.dilate(pred_1_processed_3, kernel_15)
+    pred_1_processed_3 = cv2.erode(pred_1_processed_3, kernel_15)
+
+    # fig, ax = plt.subplots(1, 5, sharex=True, sharey=True)
+    # ax[0].imshow(image_raw)
+    # ax[1].imshow(pred_1_processed_0)
+    # ax[2].imshow(pred_1_processed_1)
+    # ax[3].imshow(pred_1_processed_2)
+    # ax[4].imshow(pred_1_processed_3)
+    # plt.show()
+
+
+    im = image_raw.copy()
+    mask_1 = pred_1_processed_1
+    mask_2 = pred_1_processed_2
+    mask_3 = pred_1_processed_3
+
+    # # Slice for plot (optional)
+    # r = 2448
+    # c = 1424
+    # s = 400
+    # im = im[r:r+s, c:c+s]
+    # mask_1 = mask_1[r:r+s, c:c+s]
+    # mask_2 = mask_2[r:r+s, c:c+s]
+    # mask_3 = mask_3[r:r+s, c:c+s]
+
+    # Find segmentation contours
+    contours_1, hierarchy_1 = cv2.findContours(mask_1, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours_2, hierarchy_2 = cv2.findContours(mask_2, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours_3, hierarchy_3 = cv2.findContours(mask_3, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Segment perimeter
+    #for i, cnt in enumerate(contours_1):
+    #    mask_1_perimeter = cv2.arcLength(cnt, True)
+    #    print(f"mask_1_perimeter_{i}: {mask_1_perimeter}")
+    mask_1_total_perimeter = sum(cv2.arcLength(cnt, True) for cnt in contours_1)
+    print(f"mask_1_total_perimeter: {mask_1_total_perimeter}")
+    #for i, cnt in enumerate(contours_2):
+    #    mask_2_perimeter = cv2.arcLength(cnt, True)
+    #    print(f"mask_2_perimeter_{i}: {mask_2_perimeter}")
+    mask_2_total_perimeter = sum(cv2.arcLength(cnt, True) for cnt in contours_2)
+    print(f"mask_2_total_perimeter: {mask_2_total_perimeter}")
+    #for i, cnt in enumerate(contours_3):
+    #    mask_3_perimeter = cv2.arcLength(cnt, True)
+    #    print(f"mask_3_perimeter_{i}: {mask_3_perimeter}")
+    mask_3_total_perimeter = sum(cv2.arcLength(cnt, True) for cnt in contours_3)
+    print(f"mask_3_total_perimeter: {mask_3_total_perimeter}")
+
+    # Segment area
+    mask_1_size = mask_1.size
+    print(f"mask_1_size {mask_1_size}")
+    mask_1_area = mask_1.sum()
+    print(f"mask_1_area {mask_1_area}")
+    mask_2_size = mask_2.size
+    #print(f"mask_2_size {mask_2_size}")
+    mask_2_area = mask_2.sum()
+    print(f"mask_2_area {mask_2_area}")
+    mask_3_size = mask_3.size
+    #print(f"mask_3_size {mask_3_size}")
+    mask_3_area = mask_3.sum()
+    print(f"mask_3_area {mask_3_area}")
+
+    # Segment density
+    mask_1_density = mask_1_area / mask_1_total_perimeter
+    print(f"mask_1_density {mask_1_density}")
+    mask_2_density = mask_2_area / mask_2_total_perimeter
+    print(f"mask_2_density {mask_2_density}")
+    mask_3_density = mask_3_area / mask_3_total_perimeter
+    print(f"mask_3_density {mask_3_density}")
+
+    # Draw segmentation boundaries
+    #cv2.drawContours(im, contours_1, -1, (0.0, 0.0, 1.0), 3)
+    #cv2.drawContours(im, contours_2, -1, (0.0, 0.0, 1.0), 3)
+    cv2.drawContours(im, contours_3, -1, (0.0, 0.0, 1.0), 3)
+    #cv2.drawContours(im, [contours_1[2]], 0, (0.0, 0.0, 1.0), 3)
+    #cv2.drawContours(im, [contours_2[2]], 0, (0.0, 0.0, 1.0), 3)
+    #cv2.drawContours(im, [contours_3[2]], 0, (0.0, 0.0, 1.0), 3)
+
+    # Plot
+    fig, ax = plt.subplots(1, 4, sharex=True, sharey=True)
+    ax[0].imshow(im)
+    ax[1].imshow(mask_1)
+    ax[2].imshow(mask_1)
+    ax[3].imshow(mask_3)
     plt.show()
 
 
