@@ -362,7 +362,7 @@ def main(epochs=100, batch_size=1,
     fig, ax = plt.subplots(1, 4, sharex=True, sharey=True)
     ax[0].imshow(im)
     ax[1].imshow(mask_1)
-    ax[2].imshow(mask_1)
+    ax[2].imshow(mask_2)
     ax[3].imshow(mask_3)
     plt.show()
 
